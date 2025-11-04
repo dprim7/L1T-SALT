@@ -230,6 +230,13 @@ def parse_args():
     p = argparse.ArgumentParser(description="Train a Linformer on jet data")
     p.add_argument("--data_dir", required=True)
     p.add_argument("--save_dir", required=True)
+    p.add_argument("--use_hgq", action="store_true", help="Use HGQ model builder")
+    p.add_argument(
+        "--load_weights",
+        type=str,
+        default=None,
+        help="Path to pretrained weights to initialize from (.h5 or checkpoint dir)",
+    )
     p.add_argument("--cluster_E", action="store_true")
     p.add_argument("--cluster_F", action="store_true")
     p.add_argument("--share_EF", action="store_true")
@@ -340,44 +347,76 @@ def main():
     x_val = apply_sorting(x_val, args.sort_by)
 
     # build and compile model
-    if args.num_layers > 1:
-        model = build_linformer_transformer_classifier_big(
+    if args.use_hgq:
+        try:
+            from models.LinformerHGQ import (
+                build_linformer_transformer_classifier_hgq,
+            )
+        except Exception as e:
+            raise ImportError(
+                "--use_hgq was set but HGQ builder could not be imported. "
+                "Ensure HGQ dependencies are installed. Original error: " + str(e)
+            )
+        model = build_linformer_transformer_classifier_hgq(
             num_particles,
             x_train.shape[2],
-            d_model=args.d_model,
-            d_ff=args.d_ff,
             output_dim=output_dim,
-            num_heads=args.num_heads,
-            proj_dim=args.proj_dim,
-            cluster_E=args.cluster_E,
-            cluster_F=args.cluster_F,
-            share_EF=args.share_EF,
-            convolution=args.convolution,
-            conv_filter_heights=[1, 3, 5, 7, 9],
-            vertical_stride=1,
-            num_layers=args.num_layers,
+            hidden_channels=max(64, args.d_model),
         )
     else:
-        model = build_linformer_transformer_classifier(
-            num_particles,
-            x_train.shape[2],
-            d_model=args.d_model,
-            d_ff=args.d_ff,
-            output_dim=output_dim,
-            num_heads=args.num_heads,
-            proj_dim=args.proj_dim,
-            cluster_E=args.cluster_E,
-            cluster_F=args.cluster_F,
-            share_EF=args.share_EF,
-            convolution=args.convolution,
-            conv_filter_heights=[1, 3, 5],
-            vertical_stride=1,
-        )
+        if args.num_layers > 1:
+            model = build_linformer_transformer_classifier_big(
+                num_particles,
+                x_train.shape[2],
+                d_model=args.d_model,
+                d_ff=args.d_ff,
+                output_dim=output_dim,
+                num_heads=args.num_heads,
+                proj_dim=args.proj_dim,
+                cluster_E=args.cluster_E,
+                cluster_F=args.cluster_F,
+                share_EF=args.share_EF,
+                convolution=args.convolution,
+                conv_filter_heights=[1, 3, 5, 7, 9],
+                vertical_stride=1,
+                num_layers=args.num_layers,
+            )
+        else:
+            model = build_linformer_transformer_classifier(
+                num_particles,
+                x_train.shape[2],
+                d_model=args.d_model,
+                d_ff=args.d_ff,
+                output_dim=output_dim,
+                num_heads=args.num_heads,
+                proj_dim=args.proj_dim,
+                cluster_E=args.cluster_E,
+                cluster_F=args.cluster_F,
+                share_EF=args.share_EF,
+                convolution=args.convolution,
+                conv_filter_heights=[1, 3, 5],
+                vertical_stride=1,
+            )
     model.compile(
         optimizer=tf.keras.optimizers.Adam(),
         loss=loss_fn,
         metrics=["accuracy"],
     )
+    
+    # Load pretrained weights if specified
+    if args.load_weights:
+        if os.path.isfile(args.load_weights):
+            logging.info("Loading weights from: %s", args.load_weights)
+            try:
+                model.load_weights(args.load_weights, by_name=True, skip_mismatch=True)
+                logging.info("Successfully loaded pretrained weights (by_name=True, skip_mismatch=True)")
+            except Exception as e:
+                logging.warning("Failed to load weights: %s", str(e))
+                logging.info("Continuing with random initialization")
+        else:
+            logging.warning("Weights file not found: %s", args.load_weights)
+            logging.info("Continuing with random initialization")
+    
     model.summary(print_fn=lambda l: logging.info(l))
     logging.info("Total params: %d", model.count_params())
 
