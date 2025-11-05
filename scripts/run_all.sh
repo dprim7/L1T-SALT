@@ -16,7 +16,8 @@ Usage: $0 \
   [--num_particles N1,N2,...] \
   [--sort_by pt,eta,phi,delta_R,kt,cluster] \
   [--cluster_E] [--cluster_F] [--share_EF] [--convolution] \
-  [--num_layers N]
+  [--num_layers N] \
+  [--use_hgq]
 EOF
   exit 1
 }
@@ -34,6 +35,7 @@ HEADS_FLAG=""
 PROJ_DIM_FLAG=""
 NP_LIST=""
 SORT_MODES=""
+USE_HGQ_FLAG=""
 
 # Parse args
 while [[ $# -gt 0 ]]; do
@@ -70,6 +72,8 @@ while [[ $# -gt 0 ]]; do
       CONV_FLAG="--convolution"; shift;;
     --num_layers)
       NUM_LAYERS_FLAG="--num_layers $2"; shift 2;;
+    --use_hgq)
+      USE_HGQ_FLAG="--use_hgq"; shift;;
     *)
       echo "Unknown argument: $1"
       usage;;
@@ -108,6 +112,7 @@ for NP in "${PARTICLES[@]}"; do
       $CLUSTER_F_FLAG \
       $SHARE_EF_FLAG \
       $CONV_FLAG \
-      $NUM_LAYERS_FLAG
+      $NUM_LAYERS_FLAG \
+      $USE_HGQ_FLAG
   done
 done
